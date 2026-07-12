@@ -1,0 +1,110 @@
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--bg-dark);
+}
+
+/* Dynamic Background shapes */
+.bg-shape {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  z-index: 0;
+  opacity: 0.5;
+  animation: float 10s infinite ease-in-out alternate;
+}
+
+.shape-1 {
+  width: 400px;
+  height: 400px;
+  background: var(--primary-accent-glow);
+  top: -100px;
+  left: -100px;
+}
+
+.shape-2 {
+  width: 300px;
+  height: 300px;
+  background: rgba(102, 252, 241, 0.2);
+  bottom: -50px;
+  right: -50px;
+  animation-delay: -5s;
+}
+
+@keyframes float {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(30px, 50px) scale(1.1); }
+}
+
+.login-card {
+  padding: 48px 40px;
+  width: 100%;
+  max-width: 440px;
+  text-align: center;
+  z-index: 1;
+  animation: fadeIn 0.8s ease;
+}
+
+.logo-container {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 24px;
+  background: linear-gradient(135deg, rgba(69, 243, 255, 0.1), rgba(102, 252, 241, 0.2));
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--primary-accent-glow);
+  box-shadow: 0 0 20px var(--primary-accent-glow);
+}
+
+.logo-icon {
+  font-size: 40px;
+}
+
+.title {
+  font-size: 2.2rem;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  background: linear-gradient(to right, var(--text-primary), var(--primary-accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.subtitle {
+  color: var(--text-secondary);
+  margin: 0 0 32px 0;
+  font-size: 1rem;
+}
+
+.input-group {
+  margin-bottom: 24px;
+}
+
+.start-btn {
+  width: 100%;
+  font-size: 1.1rem;
+  padding: 14px;
+}
+
+.error-message {
+  background: rgba(255, 75, 75, 0.1);
+  color: var(--error);
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border: 1px solid rgba(255, 75, 75, 0.2);
+  font-size: 0.9rem;
+  animation: fadeIn 0.3s ease;
+}
+
+.disclaimer {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  margin-top: 32px;
+  opacity: 0.6;
+}

@@ -2,34 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createSession } from '../services/api';
 import { getDeviceId } from '../services/deviceId';
-
-const styles = {
-  page: {
-    minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'linear-gradient(135deg, #0f0f13 0%, #1a1a2e 100%)',
-  },
-  card: {
-    background: '#16213e', borderRadius: 20, padding: '48px 40px',
-    width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-    textAlign: 'center',
-  },
-  logo: { fontSize: 48, marginBottom: 8 },
-  title: { fontSize: 32, fontWeight: 700, color: '#e94560', marginBottom: 4 },
-  subtitle: { color: '#888', marginBottom: 32, fontSize: 14 },
-  input: {
-    width: '100%', padding: '14px 18px', borderRadius: 12, border: '2px solid #2a2a4a',
-    background: '#0f3460', color: '#fff', fontSize: 16, outline: 'none',
-    marginBottom: 16, transition: 'border-color 0.2s',
-  },
-  button: {
-    width: '100%', padding: '14px', borderRadius: 12, border: 'none',
-    background: 'linear-gradient(135deg, #e94560, #c0392b)',
-    color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer',
-    transition: 'opacity 0.2s', marginTop: 8,
-  },
-  error: { color: '#e94560', fontSize: 13, marginBottom: 12 },
-  disclaimer: { color: '#555', fontSize: 12, marginTop: 24, lineHeight: 1.5 },
-};
+import './LoginPage.css'; // Let's add specific styles here or use inline for specific things
 
 export default function LoginPage() {
   const [nickname, setNickname] = useState('');
@@ -55,7 +28,6 @@ export default function LoginPage() {
         return;
       }
 
-      // Store session info in sessionStorage for the call page
       sessionStorage.setItem('sessionToken', response.sessionToken);
       sessionStorage.setItem('nickname', response.nickname);
       sessionStorage.setItem('country', response.country);
@@ -73,35 +45,42 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <div style={styles.logo}>🎥</div>
-        <h1 style={styles.title}>ChatRandom</h1>
-        <p style={styles.subtitle}>Meet random people from around the world</p>
+    <div className="login-page">
+      {/* Dynamic Background Elements */}
+      <div className="bg-shape shape-1"></div>
+      <div className="bg-shape shape-2"></div>
+      
+      <div className="glass-panel login-card">
+        <div className="logo-container">
+          <div className="logo-icon">🌍</div>
+        </div>
+        <h1 className="title">Nexus</h1>
+        <p className="subtitle">Connect with anyone, anywhere.</p>
 
-        {error && <p style={styles.error}>{error}</p>}
+        {error && <div className="error-message">{error}</div>}
 
-        <input
-          style={styles.input}
-          placeholder="Choose a nickname..."
-          value={nickname}
-          onChange={(e) => setNickname(e.target.value)}
-          onKeyDown={handleKeyDown}
-          maxLength={30}
-          autoFocus
-        />
+        <div className="input-group">
+          <input
+            className="input-field"
+            placeholder="Choose a nickname..."
+            value={nickname}
+            onChange={(e) => setNickname(e.target.value)}
+            onKeyDown={handleKeyDown}
+            maxLength={30}
+            autoFocus
+          />
+        </div>
 
         <button
-          style={{ ...styles.button, opacity: loading ? 0.6 : 1 }}
+          className="btn-primary start-btn"
           onClick={handleStart}
           disabled={loading}
         >
-          {loading ? 'Connecting...' : '🚀 Start Chatting'}
+          {loading ? 'Connecting...' : 'Start Chatting'}
         </button>
 
-        <p style={styles.disclaimer}>
-          By starting, you agree to be respectful. No account required. <br />
-          Abusive users are automatically blocked.
+        <p className="disclaimer">
+          By continuing, you agree to our terms. Be respectful to others.
         </p>
       </div>
     </div>

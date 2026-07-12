@@ -14,20 +14,15 @@ export default function StatusBanner({ status, error, peerInfo }) {
   const meta = MESSAGES[status] || MESSAGES.init;
 
   return (
-    <div style={{
-      padding: '10px 20px', borderRadius: 12,
-      background: 'rgba(0,0,0,0.4)',
-      display: 'flex', alignItems: 'center', gap: 12,
-      flexWrap: 'wrap', justifyContent: 'center',
-    }}>
+    <div className="glass-panel status-banner">
       <span style={{ fontSize: 18 }}>{meta.icon}</span>
-      <span style={{ color: meta.color, fontWeight: 600, fontSize: 14 }}>
+      <span style={{ color: meta.color }}>
         {error || meta.text}
       </span>
 
       {peerInfo && status === 'connected' && (
-        <span style={{ color: '#aaa', fontSize: 13 }}>
-          with <strong style={{ color: '#fff' }}>{peerInfo.nickname}</strong>
+        <span style={{ color: 'var(--text-secondary)' }}>
+          with <strong style={{ color: 'var(--text-primary)' }}>{peerInfo.nickname}</strong>
           {peerInfo.country && (
             <> &nbsp;🌍 {peerInfo.country}</>
           )}

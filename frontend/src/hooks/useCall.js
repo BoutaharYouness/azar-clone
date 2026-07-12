@@ -40,6 +40,9 @@ export default function useCall({ sessionToken, nickname, country }) {
   const tokenRef = useRef(sessionToken);
   tokenRef.current = sessionToken;
 
+  const statusRef = useRef(status);
+  statusRef.current = status;
+
   // Whether this client is the offer sender (set by backend MATCHED message)
   const shouldSendOfferRef = useRef(false);
 
@@ -61,7 +64,12 @@ export default function useCall({ sessionToken, nickname, country }) {
 
       // Connect to backend WebSocket
       try {
-        await signaling.connect(handleSignal);
+        await signaling.connect(handleSignal, () => {
+          // STOMP reconnected with new session ID — re-join queue only if we are currently searching
+          if (mounted && statusRef.current === STATUS.SEARCHING) {
+            signaling.joinQueue(sessionToken);
+          }
+        });
         if (!mounted) return;
 
         // Join matchmaking queue
@@ -97,11 +105,17 @@ export default function useCall({ sessionToken, nickname, country }) {
         shouldSendOfferRef.current = signal.message === 'SEND_OFFER';
 
         if (signal.message === 'SEND_OFFER') {
-          await webrtc.startAsOfferer(
-            token,
-            (stream) => setRemoteStream(stream),
-            (state) => setIceState(state)
-          );
+          try {
+            await webrtc.startAsOfferer(
+              token,
+              (stream) => setRemoteStream(stream),
+              (state) => setIceState(state)
+            );
+          } catch (err) {
+            console.error('[WebRTC] startAsOfferer failed:', err);
+            setError('Failed to start call: ' + err.message);
+            setStatus(STATUS.ERROR);
+          }
         }
         break;
 

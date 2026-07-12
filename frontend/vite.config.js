@@ -15,22 +15,22 @@ export default defineConfig({
 
     // 🔐 HTTPS avec certificat mkcert
     https: {
-      key: fs.readFileSync('./10.203.148.87-key.pem'),
-      cert: fs.readFileSync('./10.203.148.87.pem'),
+      key: fs.readFileSync('./192.168.1.7+2-key.pem'),
+      cert: fs.readFileSync('./192.168.1.7+2.pem'),
     },
 
     // 🔁 Proxy pour backend Spring Boot
     proxy: {
       // REST API
       '/api': {
-        target: 'http://10.203.148.87:8080',
+        target: 'http://localhost:8080',
         changeOrigin: true,
         secure: false,
       },
 
       // WebSocket (STOMP / SockJS)
       '/ws': {
-        target: 'http://10.203.148.87:8080',
+        target: 'http://localhost:8080',
         ws: true,
         changeOrigin: true,
         secure: false,

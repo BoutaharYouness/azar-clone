@@ -2,6 +2,7 @@
   "name": "azar-frontend",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "dependencies": {
     "@stomp/stompjs": "^7.0.0",
     "@vitejs/plugin-basic-ssl": "^1.2.0",

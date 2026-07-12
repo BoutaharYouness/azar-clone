@@ -4,6 +4,7 @@ import useCall from '../hooks/useCall';
 import VideoPlayer from '../components/VideoPlayer';
 import CallControls from '../components/CallControls';
 import StatusBanner from '../components/StatusBanner';
+import './CallPage.css';
 
 export default function CallPage() {
   const navigate = useNavigate();
@@ -45,24 +46,24 @@ export default function CallPage() {
   if (!sessionToken) return null;
 
   return (
-    <div style={pageStyle}>
+    <div className="call-page">
       {/* Header */}
-      <header style={headerStyle}>
-        <span style={{ fontSize: 22, fontWeight: 700, color: '#e94560' }}>🎥 ChatRandom</span>
-        <span style={{ color: '#aaa', fontSize: 13 }}>
-          👤 {nickname} &nbsp;|&nbsp; 🌍 {country}
-        </span>
+      <header className="call-header">
+        <span className="brand">Nexus</span>
+        <div className="user-info">
+          <span className="nickname">{nickname}</span>
+          <span className="country">🌍 {country}</span>
+        </div>
       </header>
 
-      {/* Status */}
+      {/* Status Banner */}
       <StatusBanner status={status} error={error} peerInfo={peerInfo} />
 
       {/* Video area */}
-      <div style={videoAreaStyle}>
+      <div className="video-container">
         {/* Remote video (large) */}
         <VideoPlayer
           stream={remoteStream}
-          style={remoteVideoStyle}
           label={peerInfo ? `${peerInfo.nickname} — ${peerInfo.country}` : ''}
         />
 
@@ -70,7 +71,7 @@ export default function CallPage() {
         <VideoPlayer
           stream={localStream}
           muted
-          style={localVideoStyle}
+          isLocal={true}
           label="You"
         />
       </div>
@@ -89,72 +90,18 @@ export default function CallPage() {
 
       {/* Report confirmation */}
       {reportSent && (
-        <div style={toastStyle}>✅ Report submitted</div>
+        <div className="toast">✅ Report submitted successfully</div>
       )}
 
       {/* Searching overlay */}
       {status === STATUS.SEARCHING && (
-        <div style={overlayStyle}>
-          <div style={{ fontSize: 48 }}>🔍</div>
-          <p style={{ fontSize: 18, marginTop: 16, color: '#aaa' }}>
+        <div className="searching-overlay">
+          <div className="search-radar">🔍</div>
+          <p style={{ fontSize: 18, marginTop: 16, color: 'var(--text-secondary)' }}>
             Finding someone for you...
           </p>
-          <div style={spinnerStyle} />
         </div>
       )}
     </div>
   );
 }
-
-// ─── Styles ────────────────────────────────────────────────────────────────
-
-const pageStyle = {
-  minHeight: '100vh', display: 'flex', flexDirection: 'column',
-  background: '#0f0f13', padding: '12px 16px', gap: 12, position: 'relative',
-};
-
-const headerStyle = {
-  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-  padding: '8px 4px',
-};
-
-const videoAreaStyle = {
-  flex: 1, position: 'relative',
-  minHeight: 300,
-};
-
-const remoteVideoStyle = {
-  width: '100%', height: '100%', minHeight: 300,
-  borderRadius: 16, background: '#111',
-};
-
-const localVideoStyle = {
-  position: 'absolute', bottom: 12, right: 12,
-  width: 140, height: 100,
-  borderRadius: 10, border: '2px solid #333',
-  zIndex: 10,
-};
-
-const overlayStyle = {
-  position: 'absolute', inset: 0,
-  background: 'rgba(15,15,19,0.85)',
-  display: 'flex', flexDirection: 'column',
-  alignItems: 'center', justifyContent: 'center',
-  borderRadius: 16, zIndex: 20,
-};
-
-const spinnerStyle = {
-  width: 40, height: 40, borderRadius: '50%',
-  border: '4px solid #2a2a4a',
-  borderTop: '4px solid #e94560',
-  animation: 'spin 1s linear infinite',
-  marginTop: 20,
-};
-
-const toastStyle = {
-  position: 'fixed', bottom: 24, left: '50%',
-  transform: 'translateX(-50%)',
-  background: '#2ecc71', color: '#fff',
-  padding: '10px 24px', borderRadius: 24,
-  fontWeight: 600, zIndex: 999,
-};

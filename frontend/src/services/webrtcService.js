@@ -9,7 +9,11 @@ import { sendSignal } from './signalingService';
 
 const STUN_URL = import.meta.env.VITE_STUN_URL || 'stun:stun.l.google.com:19302';
 
-const ICE_SERVERS = [{ urls: STUN_URL }];
+const ICE_SERVERS = [
+  { urls: STUN_URL },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+];
 
 let peerConnection = null;
 let localStream = null;
@@ -61,6 +65,7 @@ function createPeerConnection(token, onRemoteStream, onIceState) {
   // Forward ICE candidates to peer via backend
   peerConnection.onicecandidate = ({ candidate }) => {
     if (candidate) {
+      console.log('[WebRTC] Generated ICE candidate, sending to peer...');
       sendSignal({
         type: 'ICE_CANDIDATE',
         senderSessionToken: sessionToken,
@@ -71,7 +76,13 @@ function createPeerConnection(token, onRemoteStream, onIceState) {
 
   // Handle incoming remote stream
   peerConnection.ontrack = (event) => {
-    const [remoteStream] = event.streams;
+    console.log('[WebRTC] ontrack event: track kind =', event.track.kind);
+    let remoteStream = event.streams[0];
+    if (!remoteStream) {
+      console.log('[WebRTC] No stream in ontrack event, creating fallback MediaStream');
+      remoteStream = new MediaStream();
+      remoteStream.addTrack(event.track);
+    }
     if (onRemoteStreamCallback) onRemoteStreamCallback(remoteStream);
   };
 
@@ -89,35 +100,48 @@ function createPeerConnection(token, onRemoteStream, onIceState) {
  * Called when this client is designated as the OFFER sender.
  */
 export async function startAsOfferer(token, onRemoteStream, onIceState) {
+  console.log('[WebRTC] Starting as offerer, token:', token);
   createPeerConnection(token, onRemoteStream, onIceState);
 
-  const offer = await peerConnection.createOffer();
+  const offer = await peerConnection.createOffer({
+    offerToReceiveAudio: true,
+    offerToReceiveVideo: true,
+  });
+  console.log('[WebRTC] Offer created, setting local description...');
   await peerConnection.setLocalDescription(offer);
 
+  console.log('[WebRTC] Sending OFFER signal to backend...');
   sendSignal({
     type: 'OFFER',
     senderSessionToken: token,
     sdp: JSON.stringify(offer),
   });
+  console.log('[WebRTC] OFFER sent.');
 }
 
 /**
  * Called when this client receives an OFFER and must send an ANSWER.
  */
 export async function handleOffer(token, offerSdp, onRemoteStream, onIceState) {
+  console.log('[WebRTC] Received OFFER, creating answer...');
   createPeerConnection(token, onRemoteStream, onIceState);
 
   const offer = JSON.parse(offerSdp);
   await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
 
-  const answer = await peerConnection.createAnswer();
+  const answer = await peerConnection.createAnswer({
+    offerToReceiveAudio: true,
+    offerToReceiveVideo: true,
+  });
   await peerConnection.setLocalDescription(answer);
 
+  console.log('[WebRTC] Sending ANSWER signal to backend...');
   sendSignal({
     type: 'ANSWER',
     senderSessionToken: token,
     sdp: JSON.stringify(answer),
   });
+  console.log('[WebRTC] ANSWER sent.');
 }
 
 /**
@@ -125,8 +149,10 @@ export async function handleOffer(token, offerSdp, onRemoteStream, onIceState) {
  */
 export async function handleAnswer(answerSdp) {
   if (!peerConnection) return;
+  console.log('[WebRTC] Received ANSWER, setting remote description...');
   const answer = JSON.parse(answerSdp);
   await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+  console.log('[WebRTC] Remote description set successfully.');
 }
 
 /**
@@ -135,10 +161,11 @@ export async function handleAnswer(answerSdp) {
 export async function handleIceCandidate(candidateJson) {
   if (!peerConnection) return;
   try {
+    console.log('[WebRTC] Adding ICE candidate from peer...');
     const candidate = JSON.parse(candidateJson);
     await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
   } catch (e) {
-    console.error('Failed to add ICE candidate:', e);
+    console.error('[WebRTC] Failed to add ICE candidate:', e);
   }
 }
 
