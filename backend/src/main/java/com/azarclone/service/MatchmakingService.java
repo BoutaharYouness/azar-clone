@@ -13,18 +13,18 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.*;
 
 /**
- * Manages the matchmaking queue.
+ * Manages the matchmaking queue with priority-based matching.
  *
- * Architecture:
- * - A thread-safe queue holds session tokens of users waiting for a match.
- * - A @Scheduled task polls the queue every second and pairs users.
- * - Once matched, both users receive a MATCHED signal over WebSocket.
- * - The first matched user is designated as the WebRTC OFFER sender.
+ * Matching priority (expands over time):
+ * 1. Same language AND same country  (0-3s wait)
+ * 2. Same language OR same country   (3-6s wait)
+ * 3. Nearby region                   (6-9s wait)
+ * 4. Worldwide                       (9s+ wait)
  */
 @Service
 @RequiredArgsConstructor
@@ -32,8 +32,19 @@ public class MatchmakingService {
 
     private static final Logger log = LoggerFactory.getLogger(MatchmakingService.class);
 
-    /** Thread-safe FIFO queue of waiting session tokens */
-    private final ConcurrentLinkedQueue<String> waitingQueue = new ConcurrentLinkedQueue<>();
+    /** Region groups for "nearby country" matching */
+    private static final Map<String, List<String>> REGION_MAP = Map.of(
+        "NORTH_AFRICA", List.of("Morocco", "Algeria", "Tunisia", "Libya", "Egypt"),
+        "WEST_EUROPE", List.of("France", "Belgium", "Netherlands", "Luxembourg", "Switzerland", "Germany"),
+        "NORTH_AMERICA", List.of("United States", "Canada", "Mexico"),
+        "MIDDLE_EAST", List.of("Saudi Arabia", "UAE", "Qatar", "Kuwait", "Bahrain", "Oman", "Jordan", "Lebanon", "Iraq"),
+        "EAST_EUROPE", List.of("Poland", "Czech Republic", "Slovakia", "Hungary", "Romania", "Bulgaria"),
+        "SOUTH_EUROPE", List.of("Spain", "Portugal", "Italy", "Greece"),
+        "EAST_ASIA", List.of("Japan", "South Korea", "China", "Taiwan"),
+        "SOUTH_ASIA", List.of("India", "Pakistan", "Bangladesh", "Sri Lanka"),
+        "SOUTHEAST_ASIA", List.of("Thailand", "Vietnam", "Philippines", "Indonesia", "Malaysia"),
+        "OCEANIA", List.of("Australia", "New Zealand")
+    );
 
     private final SessionRepository sessionRepository;
     private final UserRepository userRepository;
@@ -42,7 +53,7 @@ public class MatchmakingService {
 
     /**
      * Add a session to the matchmaking queue.
-     * Blocked devices are rejected. Duplicate entries are prevented.
+     * Blocked devices are rejected. Marks session as SEARCHING with a queue timestamp.
      */
     @Transactional
     public void joinQueue(String sessionToken, String stompSessionId) {
@@ -61,101 +72,157 @@ public class MatchmakingService {
             return;
         }
 
-
-
-        // Prevent duplicate queue entries
-        if (!waitingQueue.contains(sessionToken)) {
-            waitingQueue.add(sessionToken);
-            log.info("Session {} joined queue. Queue size: {}", sessionToken, waitingQueue.size());
-        }
-
         // Notify client they are now searching
         SignalingMessage searching = new SignalingMessage();
         searching.setType(SignalingMessage.Type.SEARCHING);
         searching.setMessage("Looking for someone to connect with...");
 
         messagingTemplate.convertAndSend("/queue/signal-" + stompSessionId, searching);
-        log.info("Session converted ==> stompSessionId -> "+stompSessionId+" ====  SignalingMessage -> "+searching);
-        // Update STOMP session ID (may change on reconnect)
+
+        // Update session state
         session.setStompSessionId(stompSessionId);
         session.setStatus(Session.Status.SEARCHING);
         session.setPeerSessionToken(null);
+        session.setQueueJoinedAt(LocalDateTime.now());
         sessionRepository.save(session);
+
+        log.info("Session {} joined queue (lang={}, country={})", sessionToken,
+                user.getLanguage(), user.getCountry());
     }
 
     /**
-     * Polls the queue every 1 second and creates matches.
-     * Runs on the Spring scheduling thread pool.
+     * Polls the queue every 1 second and creates matches using priority logic.
+     * Fetches all SEARCHING sessions from the DB and attempts to pair them.
      */
     @Scheduled(fixedDelay = 1000)
     @Transactional
     public void processQueue() {
-        while (waitingQueue.size() >= 2) {
-            String tokenA = waitingQueue.poll();
-            String tokenB = waitingQueue.poll();
+        List<Session> searchingSessions = sessionRepository.findAllSearchingWithUser();
+        if (searchingSessions.size() < 2) return;
 
-            if (tokenA == null || tokenB == null) break;
+        Set<Long> matchedIds = new HashSet<>();
+        LocalDateTime now = LocalDateTime.now();
 
-            Optional<Session> sessionAOpt = sessionRepository.findBySessionToken(tokenA);
-            Optional<Session> sessionBOpt = sessionRepository.findBySessionToken(tokenB);
+        for (int i = 0; i < searchingSessions.size(); i++) {
+            Session sessionA = searchingSessions.get(i);
+            if (matchedIds.contains(sessionA.getId())) continue;
 
-            if (sessionAOpt.isEmpty() || sessionBOpt.isEmpty()) {
-                log.warn("One of the sessions vanished during matching: {} {}", tokenA, tokenB);
-                // Re-queue the surviving one
-                sessionAOpt.ifPresent(s -> waitingQueue.add(tokenA));
-                sessionBOpt.ifPresent(s -> waitingQueue.add(tokenB));
-                continue;
-            }
-
-            Session sessionA = sessionAOpt.get();
-            Session sessionB = sessionBOpt.get();
             User userA = sessionA.getUser();
-            User userB = sessionB.getUser();
+            long waitSecondsA = sessionA.getQueueJoinedAt() != null
+                    ? Duration.between(sessionA.getQueueJoinedAt(), now).getSeconds() : 0;
 
-            // Both must still be in SEARCHING state
-            if (sessionA.getStatus() != Session.Status.SEARCHING
-                    || sessionB.getStatus() != Session.Status.SEARCHING) {
-                log.debug("Session(s) no longer searching — skipping match");
-                if (sessionA.getStatus() == Session.Status.SEARCHING) waitingQueue.add(tokenA);
-                if (sessionB.getStatus() == Session.Status.SEARCHING) waitingQueue.add(tokenB);
-                continue;
+            Session bestMatch = null;
+            int bestScore = -1;
+
+            for (int j = i + 1; j < searchingSessions.size(); j++) {
+                Session sessionB = searchingSessions.get(j);
+                if (matchedIds.contains(sessionB.getId())) continue;
+
+                User userB = sessionB.getUser();
+                long waitSecondsB = sessionB.getQueueJoinedAt() != null
+                        ? Duration.between(sessionB.getQueueJoinedAt(), now).getSeconds() : 0;
+
+                int score = calculateMatchScore(userA, userB);
+
+                // Determine minimum acceptable score based on wait time
+                long maxWait = Math.max(waitSecondsA, waitSecondsB);
+                int minScore;
+                if (maxWait < 3) {
+                    minScore = 3; // Need same language AND same country
+                } else if (maxWait < 6) {
+                    minScore = 2; // Need same language OR same country
+                } else if (maxWait < 9) {
+                    minScore = 1; // Need at least nearby region
+                } else {
+                    minScore = 0; // Match with anyone
+                }
+
+                if (score >= minScore && score > bestScore) {
+                    bestScore = score;
+                    bestMatch = sessionB;
+                }
             }
 
-            // Link peers
-            sessionA.setPeerSessionToken(tokenB);
-            sessionA.setStatus(Session.Status.CONNECTING);
-            sessionB.setPeerSessionToken(tokenA);
-            sessionB.setStatus(Session.Status.CONNECTING);
-            sessionRepository.save(sessionA);
-            sessionRepository.save(sessionB);
-
-            log.info("Matched: {} <-> {}", tokenA, tokenB);
-
-            // Notify A: it should send the WebRTC OFFER
-            SignalingMessage matchForA = new SignalingMessage();
-            matchForA.setType(SignalingMessage.Type.MATCHED);
-            matchForA.setSenderSessionToken(tokenA);
-            matchForA.setPeerNickname(userB.getNickname());
-            matchForA.setPeerCountry(userB.getCountry());
-            matchForA.setMessage("SEND_OFFER"); // instructs client to initiate WebRTC
-            messagingTemplate.convertAndSend("/queue/signal-" + sessionA.getStompSessionId(), matchForA);
-
-            // Notify B: it should wait for the OFFER
-            SignalingMessage matchForB = new SignalingMessage();
-            matchForB.setType(SignalingMessage.Type.MATCHED);
-            matchForB.setSenderSessionToken(tokenB);
-            matchForB.setPeerNickname(userA.getNickname());
-            matchForB.setPeerCountry(userA.getCountry());
-            matchForB.setMessage("WAIT_OFFER");
-            messagingTemplate.convertAndSend("/queue/signal-" + sessionB.getStompSessionId(), matchForB);
+            if (bestMatch != null) {
+                matchedIds.add(sessionA.getId());
+                matchedIds.add(bestMatch.getId());
+                createMatch(sessionA, bestMatch);
+            }
         }
+    }
+
+    /**
+     * Score a potential match between two users.
+     * Higher = better match.
+     *   3 = same language AND same country
+     *   2 = same language OR same country
+     *   1 = nearby region
+     *   0 = worldwide (no affinity)
+     */
+    private int calculateMatchScore(User a, User b) {
+        boolean sameLanguage = a.getLanguage() != null && a.getLanguage().equalsIgnoreCase(b.getLanguage());
+        boolean sameCountry = a.getCountry() != null && a.getCountry().equalsIgnoreCase(b.getCountry());
+
+        if (sameLanguage && sameCountry) return 3;
+        if (sameLanguage || sameCountry) return 2;
+        if (areNearbyCountries(a.getCountry(), b.getCountry())) return 1;
+        return 0;
+    }
+
+    /** Check if two countries are in the same geographic region */
+    private boolean areNearbyCountries(String countryA, String countryB) {
+        if (countryA == null || countryB == null) return false;
+        for (List<String> region : REGION_MAP.values()) {
+            if (region.stream().anyMatch(c -> c.equalsIgnoreCase(countryA))
+                    && region.stream().anyMatch(c -> c.equalsIgnoreCase(countryB))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Create a match between two sessions and notify both clients */
+    private void createMatch(Session sessionA, Session sessionB) {
+        String tokenA = sessionA.getSessionToken();
+        String tokenB = sessionB.getSessionToken();
+        User userA = sessionA.getUser();
+        User userB = sessionB.getUser();
+
+        // Link peers
+        sessionA.setPeerSessionToken(tokenB);
+        sessionA.setStatus(Session.Status.CONNECTING);
+        sessionB.setPeerSessionToken(tokenA);
+        sessionB.setStatus(Session.Status.CONNECTING);
+        sessionRepository.save(sessionA);
+        sessionRepository.save(sessionB);
+
+        log.info("Matched: {} <-> {} (scoreMatch)", tokenA, tokenB);
+
+        // Notify A: it should send the WebRTC OFFER
+        SignalingMessage matchForA = new SignalingMessage();
+        matchForA.setType(SignalingMessage.Type.MATCHED);
+        matchForA.setSenderSessionToken(tokenA);
+        matchForA.setPeerNickname(userB.getNickname());
+        matchForA.setPeerCountry(userB.getCountry());
+        matchForA.setMessage("SEND_OFFER");
+        messagingTemplate.convertAndSend("/queue/signal-" + sessionA.getStompSessionId(), matchForA);
+
+        // Notify B: it should wait for the OFFER
+        SignalingMessage matchForB = new SignalingMessage();
+        matchForB.setType(SignalingMessage.Type.MATCHED);
+        matchForB.setSenderSessionToken(tokenB);
+        matchForB.setPeerNickname(userA.getNickname());
+        matchForB.setPeerCountry(userA.getCountry());
+        matchForB.setMessage("WAIT_OFFER");
+        messagingTemplate.convertAndSend("/queue/signal-" + sessionB.getStompSessionId(), matchForB);
     }
 
     /**
      * Remove a session from the queue (called on disconnect or "next").
      */
     public void removeFromQueue(String sessionToken) {
-        waitingQueue.remove(sessionToken);
+        // No longer using an in-memory queue — status is managed in DB
+        log.debug("removeFromQueue called for {}", sessionToken);
     }
 
     /** Helper: send an error signal to a STOMP session */

@@ -49,10 +49,18 @@ public class UserService {
                     .build();
         }
 
-        // Resolve country from IP
-        String ip = (request.getClientIp() != null && !request.getClientIp().isBlank())
-                ? request.getClientIp() : clientIp;
-        String country = geoLocationService.resolveCountry(ip);
+        // Resolve country: prefer client-specified, fall back to GeoIP
+        String country;
+        if (request.getCountry() != null && !request.getCountry().isBlank()) {
+            country = request.getCountry();
+        } else {
+            String ip = (request.getClientIp() != null && !request.getClientIp().isBlank())
+                    ? request.getClientIp() : clientIp;
+            country = geoLocationService.resolveCountry(ip);
+        }
+
+        String language = (request.getLanguage() != null && !request.getLanguage().isBlank())
+                ? request.getLanguage() : "en";
 
         // Create or update user record for this device
         User user = userRepository.findByDeviceId(request.getDeviceId())
@@ -63,6 +71,7 @@ public class UserService {
         user.setNickname(request.getNickname());
         user.setDeviceId(request.getDeviceId());
         user.setCountry(country);
+        user.setLanguage(language);
         user.setSessionId(sessionToken);
         userRepository.save(user);
         // 🔥 IMPORTANT — CREATE SESSION
@@ -70,11 +79,12 @@ public class UserService {
         session.setSessionToken(sessionToken);
         session.setUser(user);
         session.setStatus(Session.Status.SEARCHING);
+        session.setQueueJoinedAt(LocalDateTime.now());
 
         sessionRepository.save(session);
 
 
-        log.info("Session created for nickname={} country={} token={}", request.getNickname(), country, sessionToken);
+        log.info("Session created for nickname={} country={} language={} token={}", request.getNickname(), country, language, sessionToken);
 
         return SessionResponse.builder()
                 .success(true)

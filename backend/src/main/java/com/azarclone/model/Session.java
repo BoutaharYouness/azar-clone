@@ -50,6 +50,9 @@ public class Session {
     @Column(name = "ended_at")
     private LocalDateTime endedAt;
 
+    @Column(name = "queue_joined_at")
+    private LocalDateTime queueJoinedAt;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

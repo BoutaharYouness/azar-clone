@@ -1,0 +1,58 @@
+/* ═══════════════════════════════════════════════════════
+   Hours — Status Banner Component Styles
+   ═══════════════════════════════════════════════════════ */
+
+.status-banner-card {
+  position: absolute;
+  top: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 95;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-sm);
+  padding: 8px 18px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  animation: slideDown 0.3s var(--ease-out);
+  pointer-events: none;
+}
+
+.status-indicator-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* ─── State Modifiers ─── */
+.status-loading .status-indicator-dot {
+  background: var(--warning);
+  animation: pulse-soft 1.5s ease-in-out infinite;
+}
+
+.status-connected .status-indicator-dot {
+  background: var(--success);
+}
+
+.status-error .status-indicator-dot {
+  background: var(--danger);
+}
+
+.status-banner-text {
+  color: var(--text-secondary);
+}
+
+.status-peer-name {
+  color: var(--text-tertiary);
+}
+
+.status-peer-name strong {
+  color: var(--text-primary);
+}

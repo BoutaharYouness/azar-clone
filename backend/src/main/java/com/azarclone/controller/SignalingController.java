@@ -53,7 +53,7 @@ public class SignalingController {
         log.debug("Signal received: {} from {}", message.getType(), message.getSenderSessionToken());
 
         switch (message.getType()) {
-            case OFFER, ANSWER, ICE_CANDIDATE -> signalingService.forwardSignal(message);
+            case OFFER, ANSWER, ICE_CANDIDATE, CHAT_MESSAGE, REACTION -> signalingService.forwardSignal(message);
             case NEXT -> signalingService.handleNext(message.getSenderSessionToken());
             case END_CALL -> signalingService.handleEndCall(message.getSenderSessionToken());
             default -> log.warn("Unhandled signal type: {}", message.getType());

@@ -22,7 +22,9 @@ public class SignalingMessage {
         SEARCHING,      // Waiting for match — sent by server
         NEXT,           // Request to skip current peer
         END_CALL,       // Terminate current call
-        ERROR           // Error notification
+        ERROR,          // Error notification
+        CHAT_MESSAGE,   // In-call text chat message
+        REACTION        // Emoji reaction (floats on both screens)
     }
 
     private Type type;

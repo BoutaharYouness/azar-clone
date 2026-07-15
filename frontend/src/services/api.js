@@ -18,12 +18,20 @@ async function post(path, body) {
   return res.json();
 }
 
+async function get(path) {
+  const res = await fetch(`${BASE_URL}${path}`);
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 /**
  * Create an anonymous session on the backend.
  * @returns {Promise<{sessionToken, nickname, country, success, message}>}
  */
-export async function createSession(nickname, deviceId) {
-  return post('/api/v1/session', { nickname, deviceId });
+export async function createSession(nickname, deviceId, country, language) {
+  return post('/api/v1/session', { nickname, deviceId, country, language });
 }
 
 /**
@@ -32,4 +40,11 @@ export async function createSession(nickname, deviceId) {
 export async function reportUser(reporterSessionToken, reportedDeviceId, reason = '') {
   return post('/api/v1/report', { reporterSessionToken, reportedDeviceId, reason });
 }
-  
+
+/**
+ * Fetch live platform statistics.
+ * @returns {Promise<{onlineUsers, waitingUsers, countriesOnline, avgWaitSeconds}>}
+ */
+export async function fetchStats() {
+  return get('/api/v1/stats');
+}

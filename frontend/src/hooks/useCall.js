@@ -90,8 +90,15 @@ export default function useCall({ sessionToken, nickname, country }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const onSignalRef = useRef(null);
+
   // ─── Signal handler ───────────────────────────────────────────────────────
   const handleSignal = useCallback(async (signal) => {
+    if (onSignalRef.current) {
+      const handled = onSignalRef.current(signal);
+      if (handled) return;
+    }
+
     const token = tokenRef.current;
 
     switch (signal.type) {
@@ -220,5 +227,6 @@ export default function useCall({ sessionToken, nickname, country }) {
     nextPeer,
     endCall,
     reportPeer,
+    onSignalRef,
   };
 }

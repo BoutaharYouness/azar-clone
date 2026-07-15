@@ -31,6 +31,9 @@ public class User {
     @Column(length = 100)
     private String country;
 
+    @Column(length = 10)
+    private String language;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

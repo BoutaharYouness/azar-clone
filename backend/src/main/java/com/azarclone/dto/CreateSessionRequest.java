@@ -18,4 +18,10 @@ public class CreateSessionRequest {
 
     /** Client IP forwarded by proxy, or resolved server-side */
     private String clientIp;
+
+    /** Country chosen by the user (e.g. "Morocco") */
+    private String country;
+
+    /** Language chosen by the user (e.g. "en", "fr", "ar") */
+    private String language;
 }

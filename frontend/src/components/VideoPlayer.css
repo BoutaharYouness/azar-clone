@@ -1,0 +1,78 @@
+/* ═══════════════════════════════════════════════════════
+   Hours — Video Player Component Styles
+   ═══════════════════════════════════════════════════════ */
+
+.video-player-container {
+  position: relative;
+  overflow: hidden;
+  background: #0d1117;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-player-container video {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ─── Placeholder / Camera Off State ─── */
+.video-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.placeholder-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-sm);
+}
+
+.placeholder-text {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+/* ─── Name Tag Label Badge ─── */
+.video-label-badge {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  z-index: 12;
+}
+
+/* Local preview label badge */
+.video-player-container.local .video-label-badge {
+  bottom: 12px;
+  left: 12px;
+  font-size: 0.75rem;
+}
+
+/* Local placeholder smaller styling */
+.video-player-container.local .placeholder-avatar {
+  width: 48px;
+  height: 48px;
+}
+.video-player-container.local .placeholder-avatar svg {
+  width: 24px;
+  height: 24px;
+}

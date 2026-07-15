@@ -1,33 +1,42 @@
 import React from 'react';
-
-const MESSAGES = {
-  init: { text: 'Initializing...', color: '#555', icon: '⏳' },
-  connecting_ws: { text: 'Connecting to server...', color: '#f39c12', icon: '🔌' },
-  searching: { text: 'Looking for someone...', color: '#3498db', icon: '🔍' },
-  connecting_peer: { text: 'Connecting to peer...', color: '#9b59b6', icon: '🤝' },
-  connected: { text: 'Connected!', color: '#2ecc71', icon: '✅' },
-  disconnected: { text: 'Disconnected', color: '#e74c3c', icon: '🔴' },
-  error: { text: 'Error', color: '#e74c3c', icon: '❌' },
-};
+import { t } from '../services/i18n';
+import './StatusBanner.css';
 
 export default function StatusBanner({ status, error, peerInfo }) {
-  const meta = MESSAGES[status] || MESSAGES.init;
+  if (status === 'searching') return null; // We have a custom full-screen overlay for searching
+
+  const getStatusText = () => {
+    switch (status) {
+      case 'init': return t('call.init');
+      case 'connecting_ws': return t('call.connecting_ws');
+      case 'connecting_peer': return t('call.connecting_peer');
+      case 'connected': return t('call.connected');
+      case 'disconnected': return t('call.disconnected');
+      case 'error': return error || t('call.error');
+      default: return t('call.init');
+    }
+  };
+
+  const getStatusClass = () => {
+    switch (status) {
+      case 'connected': return 'status-connected';
+      case 'error':
+      case 'disconnected': return 'status-error';
+      default: return 'status-loading';
+    }
+  };
 
   return (
-    <div className="glass-panel status-banner">
-      <span style={{ fontSize: 18 }}>{meta.icon}</span>
-      <span style={{ color: meta.color }}>
-        {error || meta.text}
+    <div className={`status-banner-card ${getStatusClass()}`}>
+      <span className="status-indicator-dot"></span>
+      <span className="status-banner-text">
+        {getStatusText()}
+        {peerInfo && status === 'connected' && (
+          <span className="status-peer-name">
+             &nbsp;{t('call.with')}&nbsp;<strong>{peerInfo.nickname}</strong>
+          </span>
+        )}
       </span>
-
-      {peerInfo && status === 'connected' && (
-        <span style={{ color: 'var(--text-secondary)' }}>
-          with <strong style={{ color: 'var(--text-primary)' }}>{peerInfo.nickname}</strong>
-          {peerInfo.country && (
-            <> &nbsp;🌍 {peerInfo.country}</>
-          )}
-        </span>
-      )}
     </div>
   );
 }
