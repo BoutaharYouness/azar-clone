@@ -15,8 +15,8 @@ export default defineConfig({
 
     // 🔐 HTTPS avec certificat mkcert
     https: {
-      key: fs.readFileSync('./192.168.1.7+2-key.pem'),
-      cert: fs.readFileSync('./192.168.1.7+2.pem'),
+      key: fs.readFileSync('./192.168.1.8+2-key.pem'),
+      cert: fs.readFileSync('./192.168.1.8+2.pem'),
     },
 
     // 🔁 Proxy pour backend Spring Boot

@@ -1,8 +1,11 @@
 package com.azarclone.service;
 
 import com.azarclone.dto.SignalingMessage;
+import com.azarclone.model.AuthProvider;
 import com.azarclone.model.Session;
+import com.azarclone.model.User;
 import com.azarclone.repository.SessionRepository;
+import com.azarclone.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +13,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -27,6 +31,7 @@ public class SignalingService {
     private static final Logger log = LoggerFactory.getLogger(SignalingService.class);
 
     private final SessionRepository sessionRepository;
+    private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final MatchmakingService matchmakingService;
 
@@ -61,8 +66,11 @@ public class SignalingService {
 
         // Mark sessions as CONNECTED when an ANSWER is delivered
         if (message.getType() == SignalingMessage.Type.ANSWER) {
+            LocalDateTime now = LocalDateTime.now();
             senderSession.setStatus(Session.Status.CONNECTED);
+            senderSession.setConnectedAt(now);
             peerSession.setStatus(Session.Status.CONNECTED);
+            peerSession.setConnectedAt(now);
             sessionRepository.save(senderSession);
             sessionRepository.save(peerSession);
         }
@@ -86,16 +94,49 @@ public class SignalingService {
         if (sessionOpt.isEmpty()) return;
 
         Session session = sessionOpt.get();
-        String peerToken = session.getPeerSessionToken();
+        User user = session.getUser();
 
+        // Enforce anonymous user switch limit (10 switches maximum)
+        if (user != null && user.getProvider() == AuthProvider.ANONYMOUS && user.getSwitchCount() >= 10) {
+            log.info("Anonymous user {} switch limit reached", sessionToken);
+            SignalingMessage limitError = new SignalingMessage();
+            limitError.setType(SignalingMessage.Type.ERROR);
+            limitError.setMessage("reached_free_limit");
+            messagingTemplate.convertAndSend("/queue/signal-" + session.getStompSessionId(), limitError);
+            return;
+        }
+
+        String peerToken = session.getPeerSessionToken();
         if (peerToken != null) {
+            // Update stats for peer session before they get disconnected
+            sessionRepository.findBySessionToken(peerToken).ifPresent(this::updateStatsAndCloseSession);
             notifyPeerDisconnected(peerToken);
+
+            // Update stats for current session
+            updateStatsAndCloseSession(session);
+        }
+
+        // Increment switch count
+        if (user != null) {
+            user.setSwitchCount(user.getSwitchCount() + 1);
+            userRepository.save(user);
         }
 
         // Reset this session to searching
         session.setStatus(Session.Status.SEARCHING);
         session.setPeerSessionToken(null);
+        session.setConnectedAt(null);
         sessionRepository.save(session);
+
+        // The tenth anonymous skip ends the free session before another match.
+        if (user != null && user.getProvider() == AuthProvider.ANONYMOUS && user.getSwitchCount() >= 10) {
+            log.info("Anonymous user {} completed their free skips", sessionToken);
+            SignalingMessage limitError = new SignalingMessage();
+            limitError.setType(SignalingMessage.Type.ERROR);
+            limitError.setMessage("reached_free_limit");
+            messagingTemplate.convertAndSend("/queue/signal-" + session.getStompSessionId(), limitError);
+            return;
+        }
 
         // Re-add to matchmaking queue
         matchmakingService.joinQueue(sessionToken, session.getStompSessionId());
@@ -115,20 +156,10 @@ public class SignalingService {
 
         if (peerToken != null) {
             notifyPeerDisconnected(peerToken);
-            Optional<Session> peerSessionOpt = sessionRepository.findBySessionToken(peerToken);
-            peerSessionOpt.ifPresent(peer -> {
-                peer.setStatus(Session.Status.DISCONNECTED);
-                peer.setPeerSessionToken(null);
-                peer.setEndedAt(LocalDateTime.now());
-                sessionRepository.save(peer);
-            });
+            sessionRepository.findBySessionToken(peerToken).ifPresent(this::updateStatsAndCloseSession);
         }
 
-        session.setStatus(Session.Status.DISCONNECTED);
-        session.setPeerSessionToken(null);
-        session.setEndedAt(LocalDateTime.now());
-        sessionRepository.save(session);
-
+        updateStatsAndCloseSession(session);
         matchmakingService.removeFromQueue(sessionToken);
     }
 
@@ -145,16 +176,30 @@ public class SignalingService {
 
         if (peerToken != null) {
             notifyPeerDisconnected(peerToken);
+            sessionRepository.findBySessionToken(peerToken).ifPresent(this::updateStatsAndCloseSession);
         }
 
         matchmakingService.removeFromQueue(session.getSessionToken());
-
-        session.setStatus(Session.Status.DISCONNECTED);
-        session.setPeerSessionToken(null);
-        session.setEndedAt(LocalDateTime.now());
-        sessionRepository.save(session);
+        updateStatsAndCloseSession(session);
 
         log.info("Cleaned up disconnected STOMP session: {}", stompSessionId);
+    }
+
+    /** Helper: update session duration statistics and user profile metrics */
+    private void updateStatsAndCloseSession(Session session) {
+        session.setStatus(Session.Status.DISCONNECTED);
+        session.setEndedAt(LocalDateTime.now());
+
+        if (session.getConnectedAt() != null && session.getEndedAt() != null) {
+            long durationSeconds = Duration.between(session.getConnectedAt(), session.getEndedAt()).getSeconds();
+            User user = session.getUser();
+            if (user != null) {
+                user.setTotalMatches(user.getTotalMatches() + 1);
+                user.setTotalCallDurationSeconds(user.getTotalCallDurationSeconds() + durationSeconds);
+                userRepository.save(user);
+            }
+        }
+        sessionRepository.save(session);
     }
 
     /** Sends a DISCONNECTED signal to the peer and puts them back in SEARCHING state */
@@ -169,6 +214,7 @@ public class SignalingService {
             );
             peerSession.setStatus(Session.Status.SEARCHING);
             peerSession.setPeerSessionToken(null);
+            peerSession.setConnectedAt(null);
             sessionRepository.save(peerSession);
         });
     }

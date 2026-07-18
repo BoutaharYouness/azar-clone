@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createSession, fetchStats } from '../services/api';
+import { createSession, fetchStats, refreshAccessToken } from '../services/api';
 import { getDeviceId } from '../services/deviceId';
 import { t, setLocale, getLocale, isRTL, SUPPORTED_LOCALES } from '../services/i18n';
+import AuthModal from '../components/AuthModal';
 import './LoginPage.css';
 
 const COUNTRIES = [
@@ -36,7 +37,12 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [stats, setStats] = useState(null);
   const [, forceUpdate] = useState(0);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const navigate = useNavigate();
+
+  const isLoggedIn = !!localStorage.getItem('hours_access_token');
+  const loggedNickname = localStorage.getItem('hours_user_nickname');
+  const userRole = localStorage.getItem('hours_user_role');
 
   // Fetch live stats
   useEffect(() => {
@@ -52,6 +58,19 @@ export default function LoginPage() {
     return () => { active = false; clearInterval(interval); };
   }, []);
 
+  // Restore a Google session through its refresh token when the access token is absent.
+  useEffect(() => {
+    const refreshToken = localStorage.getItem('hours_refresh_token');
+    if (!refreshToken || localStorage.getItem('hours_access_token')) return;
+    refreshAccessToken(refreshToken)
+      .then(({ accessToken, refreshToken: nextRefreshToken }) => {
+        localStorage.setItem('hours_access_token', accessToken);
+        if (nextRefreshToken) localStorage.setItem('hours_refresh_token', nextRefreshToken);
+        forceUpdate(n => n + 1);
+      })
+      .catch(handleLogout);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const handleLanguageChange = useCallback((e) => {
     const locale = e.target.value;
     setLanguage(locale);
@@ -65,11 +84,7 @@ export default function LoginPage() {
   }, []);
 
   async function handleStart() {
-    const trimmed = nickname.trim();
-    if (trimmed.length < 2) {
-      setError(t('home.nickname_error'));
-      return;
-    }
+
     setError('');
     setLoading(true);
 
@@ -77,7 +92,8 @@ export default function LoginPage() {
       const deviceId = getDeviceId();
       const selectedCountry = COUNTRIES.find(c => c.code === country);
       const countryName = selectedCountry ? selectedCountry.name : 'Unknown';
-      const response = await createSession(trimmed, deviceId, countryName, language);
+      const displayName = isLoggedIn ? (loggedNickname || 'Member') : 'Guest';
+      const response = await createSession(displayName, deviceId, countryName, language);
 
       if (!response.success) {
         setError(response.message || 'Unable to create session.');
@@ -98,8 +114,20 @@ export default function LoginPage() {
     }
   }
 
-  function handleKeyDown(e) {
-    if (e.key === 'Enter') handleStart();
+
+  function handleLogout() {
+    localStorage.removeItem('hours_access_token');
+    localStorage.removeItem('hours_refresh_token');
+    localStorage.removeItem('hours_user_role');
+    localStorage.removeItem('hours_user_nickname');
+    localStorage.removeItem('hours_user_email');
+    localStorage.removeItem('hours_user_avatar');
+    forceUpdate(n => n + 1);
+  }
+
+  function handleAuthSuccess(authResult) {
+    setShowAuthModal(false);
+    forceUpdate(n => n + 1);
   }
 
   const selectedCountryData = COUNTRIES.find(c => c.code === country);
@@ -142,18 +170,8 @@ export default function LoginPage() {
 
         {error && <div className="error-banner">{error}</div>}
 
-        {/* Form */}
+        {/* Anonymous entry — no registration, username, or password fields. */}
         <div className="form-section">
-          <input
-            className="input-field"
-            placeholder={t('home.nickname_placeholder')}
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            onKeyDown={handleKeyDown}
-            maxLength={30}
-            autoFocus
-            id="nickname-input"
-          />
 
           <div className="selectors-row">
             <div className="selector-group">
@@ -179,7 +197,7 @@ export default function LoginPage() {
             disabled={loading}
             id="start-button"
           >
-            {loading ? t('home.connecting') : t('home.start')}
+            {loading ? t('home.connecting') : 'Start anonymously'}
           </button>
         </div>
 
@@ -205,7 +223,49 @@ export default function LoginPage() {
         )}
 
         <p className="disclaimer">{t('home.disclaimer')}</p>
+
+        {/* Auth actions row */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 8, flexWrap: 'wrap' }}>
+          {isLoggedIn ? (
+            <>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                ✅ Signed in as <strong>{loggedNickname}</strong>
+              </span>
+              {userRole === 'ADMIN' && (
+                <button
+                  className="btn-secondary"
+                  style={{ fontSize: '0.8rem', padding: '6px 14px' }}
+                  onClick={() => navigate('/admin')}
+                >
+                  👑 Admin Dashboard
+                </button>
+              )}
+              <button
+                className="btn-secondary"
+                style={{ fontSize: '0.8rem', padding: '6px 14px' }}
+                onClick={handleLogout}
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <button
+              className="btn-secondary"
+              style={{ fontSize: '0.85rem', padding: '8px 20px' }}
+              onClick={() => setShowAuthModal(true)}
+            >
+              🔑 Continue with Google
+            </button>
+          )}
+        </div>
       </div>
+
+      <AuthModal
+        isOpen={showAuthModal}
+        isLimitReached={false}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={handleAuthSuccess}
+      />
     </div>
   );
 }

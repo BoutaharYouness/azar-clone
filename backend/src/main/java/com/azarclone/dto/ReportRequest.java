@@ -14,4 +14,6 @@ public class ReportRequest {
 
     @Getter
     private String reason;
+
+    private String reasonCategory;
 }

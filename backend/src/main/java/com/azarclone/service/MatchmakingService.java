@@ -3,6 +3,7 @@ package com.azarclone.service;
 import com.azarclone.dto.SignalingMessage;
 import com.azarclone.model.Session;
 import com.azarclone.model.User;
+import com.azarclone.model.UserRole;
 import com.azarclone.repository.SessionRepository;
 import com.azarclone.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,10 @@ import java.util.*;
  * 2. Same language OR same country   (3-6s wait)
  * 3. Nearby region                   (6-9s wait)
  * 4. Worldwide                       (9s+ wait)
+ *
+ * PREMIUM features incorporated:
+ * - Premium users have priority in the queue.
+ * - Premium users can apply gender and country matching filters.
  */
 @Service
 @RequiredArgsConstructor
@@ -100,6 +105,18 @@ public class MatchmakingService {
         List<Session> searchingSessions = sessionRepository.findAllSearchingWithUser();
         if (searchingSessions.size() < 2) return;
 
+        // Sort queue: PREMIUM / ADMIN users are prioritized, followed by wait time
+        searchingSessions.sort((s1, s2) -> {
+            boolean s1Prem = s1.getUser().getRole() == UserRole.PREMIUM || s1.getUser().getRole() == UserRole.ADMIN;
+            boolean s2Prem = s2.getUser().getRole() == UserRole.PREMIUM || s2.getUser().getRole() == UserRole.ADMIN;
+            if (s1Prem && !s2Prem) return -1;
+            if (!s1Prem && s2Prem) return 1;
+
+            if (s1.getQueueJoinedAt() == null) return 1;
+            if (s2.getQueueJoinedAt() == null) return -1;
+            return s1.getQueueJoinedAt().compareTo(s2.getQueueJoinedAt());
+        });
+
         Set<Long> matchedIds = new HashSet<>();
         LocalDateTime now = LocalDateTime.now();
 
@@ -123,6 +140,7 @@ public class MatchmakingService {
                         ? Duration.between(sessionB.getQueueJoinedAt(), now).getSeconds() : 0;
 
                 int score = calculateMatchScore(userA, userB);
+                if (score == -1) continue; // Incompatible due to premium filters
 
                 // Determine minimum acceptable score based on wait time
                 long maxWait = Math.max(waitSecondsA, waitSecondsB);
@@ -153,13 +171,42 @@ public class MatchmakingService {
 
     /**
      * Score a potential match between two users.
-     * Higher = better match.
+     * Returns:
+     *   -1 = incompatible (due to premium filters)
      *   3 = same language AND same country
      *   2 = same language OR same country
      *   1 = nearby region
      *   0 = worldwide (no affinity)
      */
     private int calculateMatchScore(User a, User b) {
+        // Enforce filters for User A if A is Premium/Admin
+        if (a.getRole() == UserRole.PREMIUM || a.getRole() == UserRole.ADMIN) {
+            if (a.getGenderFilter() != null && !a.getGenderFilter().equalsIgnoreCase("all")) {
+                if (b.getGender() == null || !b.getGender().equalsIgnoreCase(a.getGenderFilter())) {
+                    return -1; // Gender mismatch
+                }
+            }
+            if (a.getCountryFilter() != null && !a.getCountryFilter().isBlank()) {
+                if (b.getCountry() == null || !b.getCountry().equalsIgnoreCase(a.getCountryFilter())) {
+                    return -1; // Country mismatch
+                }
+            }
+        }
+
+        // Enforce filters for User B if B is Premium/Admin
+        if (b.getRole() == UserRole.PREMIUM || b.getRole() == UserRole.ADMIN) {
+            if (b.getGenderFilter() != null && !b.getGenderFilter().equalsIgnoreCase("all")) {
+                if (a.getGender() == null || !a.getGender().equalsIgnoreCase(b.getGenderFilter())) {
+                    return -1; // Gender mismatch
+                }
+            }
+            if (b.getCountryFilter() != null && !b.getCountryFilter().isBlank()) {
+                if (a.getCountry() == null || !a.getCountry().equalsIgnoreCase(b.getCountryFilter())) {
+                    return -1; // Country mismatch
+                }
+            }
+        }
+
         boolean sameLanguage = a.getLanguage() != null && a.getLanguage().equalsIgnoreCase(b.getLanguage());
         boolean sameCountry = a.getCountry() != null && a.getCountry().equalsIgnoreCase(b.getCountry());
 
@@ -221,7 +268,6 @@ public class MatchmakingService {
      * Remove a session from the queue (called on disconnect or "next").
      */
     public void removeFromQueue(String sessionToken) {
-        // No longer using an in-memory queue — status is managed in DB
         log.debug("removeFromQueue called for {}", sessionToken);
     }
 

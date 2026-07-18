@@ -33,4 +33,8 @@ public interface SessionRepository extends JpaRepository<Session, Long> {
     /** Average wait time in seconds for sessions currently searching */
     @Query("SELECT COALESCE(AVG(TIMESTAMPDIFF(SECOND, s.queueJoinedAt, CURRENT_TIMESTAMP)), 0) FROM Session s WHERE s.status = 'SEARCHING' AND s.queueJoinedAt IS NOT NULL")
     double averageWaitTimeSeconds();
+
+    /** Count sessions that are CONNECTED */
+    @Query("SELECT COUNT(s) FROM Session s WHERE s.status = 'CONNECTED'")
+    long countConnected();
 }

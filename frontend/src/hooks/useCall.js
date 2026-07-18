@@ -6,6 +6,7 @@
  *  - Matchmaking queue
  *  - WebRTC signaling responses
  *  - Call controls (mute, camera, next, end)
+ *  - Anonymous switch limit enforcement (triggers auth modal)
  *
  * The backend drives all state transitions. This hook is purely reactive.
  */
@@ -14,7 +15,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import * as signaling from '../services/signalingService';
 import * as webrtc from '../services/webrtcService';
 import { reportUser } from '../services/api';
-import { getDeviceId } from '../services/deviceId';
+
 
 const STATUS = {
   INIT: 'init',
@@ -35,6 +36,7 @@ export default function useCall({ sessionToken, nickname, country }) {
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [iceState, setIceState] = useState('');
   const [error, setError] = useState('');
+  const [showAuthModal, setShowAuthModal] = useState(false); // limit reached trigger
 
   // Ref so signal handler closure always has latest sessionToken
   const tokenRef = useRef(sessionToken);
@@ -154,8 +156,18 @@ export default function useCall({ sessionToken, nickname, country }) {
         break;
 
       case 'ERROR':
-        setError(signal.message || 'An error occurred.');
-        setStatus(STATUS.ERROR);
+        // Special case: free limit reached — show auth modal instead of error state
+        if (signal.message === 'reached_free_limit') {
+          setShowAuthModal(true);
+          // Keep peer connection closed
+          webrtc.closePeerConnection();
+          setRemoteStream(null);
+          setPeerInfo(null);
+          setStatus(STATUS.DISCONNECTED);
+        } else {
+          setError(signal.message || 'An error occurred.');
+          setStatus(STATUS.ERROR);
+        }
         break;
 
       default:
@@ -199,12 +211,23 @@ export default function useCall({ sessionToken, nickname, country }) {
     setStatus(STATUS.DISCONNECTED);
   }
 
-  async function reportPeer(peerDeviceId) {
+  async function reportPeer(peerDeviceId, reason, reasonCategory) {
     try {
-      await reportUser(sessionToken, peerDeviceId, 'Reported by user');
+      await reportUser(sessionToken, peerDeviceId, reason || 'Reported by user', reasonCategory || 'other');
     } catch (e) {
       console.error('Report failed:', e);
     }
+  }
+
+  function dismissAuthModal() {
+    setShowAuthModal(false);
+  }
+
+  function onAuthSuccess(authResult) {
+    // Start a fresh authenticated session after Google sign-in.
+    setShowAuthModal(false);
+    // The home page will create the authenticated matchmaking session.
+    window.location.assign('/');
   }
 
   function cleanup() {
@@ -221,12 +244,16 @@ export default function useCall({ sessionToken, nickname, country }) {
     remoteStream,
     audioEnabled,
     videoEnabled,
+    iceState,
     error,
+    showAuthModal,
     toggleAudio,
     toggleVideo,
     nextPeer,
     endCall,
     reportPeer,
+    dismissAuthModal,
+    onAuthSuccess,
     onSignalRef,
   };
 }

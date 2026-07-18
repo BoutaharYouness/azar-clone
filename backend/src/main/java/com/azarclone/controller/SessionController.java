@@ -50,9 +50,10 @@ public class SessionController {
 
         // Resolve reporter's device ID from their session (simplified: client sends it directly)
         boolean autoBlocked = userService.reportDevice(
-                request.getReporterSessionToken(),  // used as identifier here for simplicity
+                request.getReporterSessionToken(),
                 request.getReportedDeviceId(),
-                request.getReason()
+                request.getReason(),
+                request.getReasonCategory()
         );
 
         return ResponseEntity.ok(Map.of(

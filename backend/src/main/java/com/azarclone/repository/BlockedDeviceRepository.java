@@ -7,4 +7,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface BlockedDeviceRepository extends JpaRepository<BlockedDevice, Long> {
     boolean existsByDeviceId(String deviceId);
+    boolean existsByIpAddress(String ipAddress);
+    boolean existsByAccount_Id(Long accountId);
+    boolean existsByBrowserFingerprint(String browserFingerprint);
 }

@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
-
 import java.time.LocalDateTime;
 
 @Entity
@@ -26,6 +25,17 @@ public class Report {
 
     @Column(length = 500)
     private String reason;
+
+    @Column(name = "reason_category", length = 50)
+    private String reasonCategory;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reporter_user_id")
+    private User reporterUser;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reported_user_id")
+    private User reportedUser;
 
     @Column(nullable = false)
     private LocalDateTime timestamp;

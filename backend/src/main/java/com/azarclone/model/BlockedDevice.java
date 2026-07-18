@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
-
 import java.time.LocalDateTime;
 
 @Entity
@@ -18,8 +17,18 @@ public class BlockedDevice {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "device_id", nullable = false, unique = true, length = 100)
+    @Column(name = "device_id", unique = true, length = 100)
     private String deviceId;
+
+    @Column(name = "ip_address", length = 50)
+    private String ipAddress;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "account_id")
+    private User account;
+
+    @Column(name = "browser_fingerprint", length = 100)
+    private String browserFingerprint;
 
     @Column(name = "blocked_at", nullable = false)
     private LocalDateTime blockedAt;

@@ -4,6 +4,9 @@ import useCall from '../hooks/useCall';
 import VideoPlayer from '../components/VideoPlayer';
 import CallControls from '../components/CallControls';
 import StatusBanner from '../components/StatusBanner';
+import AuthModal from '../components/AuthModal';
+import SettingsModal from '../components/SettingsModal';
+import ProfileModal from '../components/ProfileModal';
 import { t, getLocale } from '../services/i18n';
 import { sendSignal } from '../services/signalingService';
 import { playMatchFound, playDisconnected, playMessageReceived, playToggle } from '../services/soundService';
@@ -40,7 +43,8 @@ export default function CallPage() {
   const {
     status, STATUS, peerInfo,
     localStream, remoteStream,
-    audioEnabled, videoEnabled, error,
+    audioEnabled, videoEnabled, iceState, error,
+    showAuthModal, dismissAuthModal, onAuthSuccess,
     toggleAudio, toggleVideo,
     nextPeer, endCall, reportPeer,
     onSignalRef,
@@ -52,6 +56,7 @@ export default function CallPage() {
   const [reportSent, setReportSent] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
@@ -60,6 +65,7 @@ export default function CallPage() {
   const [sessionStats, setSessionStats] = useState({ peopleMet: 0, countries: new Set() });
   const [currentTip, setCurrentTip] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [reportCategory, setReportCategory] = useState('other');
 
   const controlsTimerRef = useRef(null);
   const callTimerRef = useRef(null);
@@ -178,6 +184,7 @@ export default function CallPage() {
         case 'escape':
           setShowReportModal(false);
           setShowSettingsModal(false);
+          setShowProfileModal(false);
           break;
       }
     }
@@ -230,8 +237,8 @@ export default function CallPage() {
   }
 
   // ─── Report ───
-  function handleReport(reason) {
-    reportPeer('peer-device-id-from-signal');
+  function handleReport(reasonKey) {
+    reportPeer('peer-device-id-from-signal', reasonKey, reasonKey);
     setReportSent(true);
     setShowReportModal(false);
     setTimeout(() => setReportSent(false), 3000);
@@ -262,10 +269,23 @@ export default function CallPage() {
       <header className={`call-header ${showControls ? 'visible' : 'hidden'}`}>
         <span className="header-brand">{t('app.name')}</span>
         <div className="header-right">
+          <div className="call-health" aria-label="Call status">
+            <span className={`health-status ${status === 'connected' ? 'online' : ''}`}>{status.replace('_', ' ')}</span>
+            <span className={`network-quality ${iceState === 'failed' ? 'weak' : ''}`} title="Network quality" />
+            <span className={`device-status microphone ${audioEnabled ? 'enabled' : 'disabled'}`} title={audioEnabled ? 'Microphone on' : 'Microphone off'} />
+            <span className={`device-status camera ${videoEnabled ? 'enabled' : 'disabled'}`} title={videoEnabled ? 'Camera on' : 'Camera off'} />
+          </div>
           {status === 'connected' && (
             <span className="call-timer">{formatTime(callTimer)}</span>
           )}
-          <div className="user-badge">
+          <div className="user-badge" onClick={() => setShowProfileModal(true)} title="View Profile" style={{ cursor: 'pointer' }}>
+            {localStorage.getItem('hours_user_avatar') && (
+              <img
+                src={localStorage.getItem('hours_user_avatar')}
+                alt="avatar"
+                style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--primary)' }}
+              />
+            )}
             <span className="user-nickname">{nickname}</span>
             <span className="user-country">{getCountryFlag(country)} {country}</span>
           </div>
@@ -445,42 +465,24 @@ export default function CallPage() {
       )}
 
       {/* Settings Modal */}
-      {showSettingsModal && (
-        <div className="modal-overlay" onClick={() => setShowSettingsModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h2>{t('settings.title')}</h2>
-            <div className="settings-list">
-              <div className="settings-item">
-                <span>{t('settings.camera')}</span>
-                <span className="settings-status">{videoEnabled ? '✅' : '❌'}</span>
-              </div>
-              <div className="settings-item">
-                <span>{t('settings.microphone')}</span>
-                <span className="settings-status">{audioEnabled ? '✅' : '❌'}</span>
-              </div>
-              <div className="settings-item">
-                <span>{t('settings.language')}</span>
-                <span className="settings-status">{getLocale().toUpperCase()}</span>
-              </div>
-              <div className="settings-item">
-                <span>{t('settings.noise_suppression')}</span>
-                <span className="settings-status">Auto</span>
-              </div>
-              <div className="settings-item">
-                <span>{t('settings.video_quality')}</span>
-                <span className="settings-status">HD</span>
-              </div>
-            </div>
-            <button
-              className="btn-secondary"
-              style={{ width: '100%', marginTop: 16 }}
-              onClick={() => setShowSettingsModal(false)}
-            >
-              {t('settings.close')}
-            </button>
-          </div>
-        </div>
-      )}
+      <SettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+      />
+
+      {/* Profile Modal */}
+      <ProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+      />
+
+      {/* Auth Modal — shown when anonymous switch limit is reached */}
+      <AuthModal
+        isOpen={showAuthModal}
+        isLimitReached={true}
+        onClose={dismissAuthModal}
+        onSuccess={onAuthSuccess}
+      />
     </div>
   );
 }
